@@ -22,46 +22,45 @@ def search_space(trial):
     spectral_radius = trial.suggest_float(
         "spectral_radius",
         min_spectral_radius,
-        2.0,
+        1.5,
         log=True
     )
 
     return {
         "spectral_radius": spectral_radius,
-        "alpha": trial.suggest_float("alpha", 1e-7, 1e-1, log=True),
+        "alpha": trial.suggest_float("alpha", 1e-7, 1e-2, log=True),
         "leak_rate": leak_rate,
         "input_scaling": trial.suggest_float("input_scaling", 0.1, 1.0),
-        "p": trial.suggest_float("p", 0.1, 1.0),
+        "p": trial.suggest_float("p", 0.01, 0.1),
     }
 
 # Forecasting function
-def get_loss(data, forecast_length, model_config, loss_function, seed):
+def get_loss(data, val_length, model_config, loss_function, seed):
 
     #dim = data["train_data"].shape[1]
     model_config["seed"] = seed
 
     model = create_model(model_config=model_config)
-    warmup_training = 200
-    model.fit(data["train_data"], data["train_target"], warmup=warmup_training)
+    model.fit(data["train_data"][:-1], data["train_data"][1:], warmup=240)
 
     Y_pred = forecast_rcpy(
         model=model,
         warmup_data=data['warmup_data'],
-        forecast_length=forecast_length
+        forecast_length=val_length
     )
 
     if loss_function == "soft_horizon":
-        return soft_horizon_loss(data["val_data"][:forecast_length,:], Y_pred, metric="rmse")
+        return soft_horizon_loss(data["val_data"], Y_pred, metric="rmse")
     elif loss_function == "rmse":
-        return standard_loss(data["val_data"][:forecast_length,:], Y_pred, metric="rmse")
+        return standard_loss(data["val_data"], Y_pred, metric="rmse")
 
 # Building objective function
-def build_objective(data, forecast_length, reservoir_units, loss_function, seed):
+def build_objective(data, val_length, reservoir_units, loss_function, seed):
     def objective(trial):
         hyperparams = search_space(trial)
         hyperparams["reservoir_units"] = reservoir_units
 
-        loss = get_loss(data, forecast_length, hyperparams, loss_function, seed)
+        loss = get_loss(data, val_length, hyperparams, loss_function, seed)
 
         trial.report(loss, step=0)
         if trial.should_prune():

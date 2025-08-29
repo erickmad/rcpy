@@ -75,7 +75,7 @@ def soft_horizon_loss(
     *,
     metric: str = "rmse",
     threshold: float = 0.2,
-    softness: float = 0.04,               # ~ 10 % of threshold is a good default
+    softness: float = 0.02,               # ~ 10 % of threshold is a good default
 ) -> float:
     """
     Differentiable proxy for forecast-horizon.

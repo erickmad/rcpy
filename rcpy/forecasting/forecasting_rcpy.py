@@ -62,7 +62,7 @@ def multiple_forecasts_rcpy(
             config["seed"] = seed
 
             model = create_model(model_config=config)
-            model.fit(data["train_data"], data["train_target"], warmup=len(data["warmup_data"]))
+            model.fit(data["train_data"], data["train_target"], warmup=240)
 
             pred = forecast_rcpy(
                 model=model,
@@ -94,7 +94,7 @@ def multiple_forecasts_rcpy(
             }
 
             model = create_model(model_config=config)
-            model.fit(data["train_data"], data["train_target"], warmup=len(data["warmup_data"]))
+            model.fit(data["train_data"], data["train_target"], warmup=240)
 
             pred = forecast_rcpy(
                 model=model,

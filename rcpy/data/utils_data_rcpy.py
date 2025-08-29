@@ -20,61 +20,85 @@ def load_data_rcpy(data_file):
 
     return data
 
+import numpy as np
+
 def preprocess_data_rcpy(
     data,
-    init_transient,
-    transient_length,
-    warmup_length,
-    train_length,
+    init_discard=0,
+    train_length=500,
+    val_length=500,
+    warmup_length=300,
     normalize=True,
 ):
+    """
+    Preprocess time series data for reservoir computing.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Input time series of shape (T,) or (T, D).
+    init_discard : int, optional
+        Number of initial samples to discard (default: 0).
+    train_length : int, optional
+        Length of the training set (default: 500).
+    val_length : int, optional
+        Length of the validation set (default: 500).
+    warmup_length : int, optional
+        Length of the warmup set, which ends with val_data and starts
+        warmup_length steps earlier (default: 300).
+    normalize : bool, optional
+        Whether to scale features to [-1, 1] using training data (default: True).
+
+    Returns
+    -------
+    dict
+        Dictionary with training, validation, test, and warmup splits,
+        as well as normalization parameters.
+    """
 
     # Ensure 2D shape
     if data.ndim == 1:
         data = data.reshape(-1, 1)
 
-    # Remove initial transient
-    data = data[init_transient:]
+    # Discard initial samples
+    data = data[init_discard:]
     T = data.shape[0]
 
-    # Define split indices
-    train_index = transient_length + train_length
-    val_length = T - train_index - 1
+    # Compute split indices
+    train_end = train_length
+    val_end = train_end + val_length
 
-    # Extract sections
-    transient_data = data[:transient_length]
-    train_data = data[transient_length:train_index]
-    train_target = data[transient_length + 1 : train_index + 1]
-    warmup_data = train_data[-warmup_length:]
-    val_data = data[train_index:train_index + val_length]
-    val_target = data[train_index + 1:train_index + val_length + 1]
+    # Extract splits
+    train_data = data[:train_end]
+    val_data = data[train_end:val_end]
+    test_data = data[val_end:]
 
-    # Normalization (per feature)
+    # Warmup ends at val_end and starts warmup_length before
+    warmup_start = max(0, val_end - warmup_length)
+    warmup_data = data[warmup_start:val_end]
+
+    # Normalization (based on training data)
     if normalize:
-        train_min = np.min(train_data, axis=0)  # shape: (D,)
-        train_max = np.max(train_data, axis=0)  # shape: (D,)
+        train_min = np.min(train_data, axis=0)
+        train_max = np.max(train_data, axis=0)
         scale = lambda x: 2 * (x - train_min) / (train_max - train_min) - 1
 
-        transient_data = scale(transient_data)
         train_data = scale(train_data)
-        train_target = scale(train_target)
-        warmup_data = scale(warmup_data)
         val_data = scale(val_data)
-        val_target = scale(val_target)
+        test_data = scale(test_data)
+        warmup_data = scale(warmup_data)
     else:
-        train_min = None
-        train_max = None
+        train_min, train_max = None, None
 
     return {
-        "transient_data": transient_data,
         "train_data": train_data,
-        "train_target": train_target,
-        "warmup_data": warmup_data,
         "val_data": val_data,
-        "val_target": val_target,
+        "test_data": test_data,
+        "warmup_data": warmup_data,
         "train_min": train_min,
         "train_max": train_max,
     }
+
 
 def denormalize_data_rcpy(x_scaled, train_min, train_max):
     x_scaled = np.asarray(x_scaled)
