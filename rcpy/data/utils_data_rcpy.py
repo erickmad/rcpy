@@ -20,7 +20,15 @@ def load_data_rcpy(data_file):
 
     return data
 
-import numpy as np
+def make_scaler(train_data):
+    train_min = np.min(train_data, axis=0)
+    train_max = np.max(train_data, axis=0)
+    denom = np.where(train_max - train_min == 0, 1.0, train_max - train_min)
+
+    def scale(x):
+        return 2 * (x - train_min) / denom - 1
+
+    return scale, train_min, train_max
 
 def preprocess_data_rcpy(
     data,
@@ -79,10 +87,7 @@ def preprocess_data_rcpy(
 
     # Normalization (based on training data)
     if normalize:
-        train_min = np.min(train_data, axis=0)
-        train_max = np.max(train_data, axis=0)
-        scale = lambda x: 2 * (x - train_min) / (train_max - train_min) - 1
-
+        scale, train_min, train_max = make_scaler(train_data)
         train_data = scale(train_data)
         val_data = scale(val_data)
         test_data = scale(test_data)
