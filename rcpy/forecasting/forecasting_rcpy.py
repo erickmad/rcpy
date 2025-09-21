@@ -1,6 +1,7 @@
 import numpy as np
 from rcpy.models import create_model
-import random, json
+import random, json, os
+import pandas as pd
 
 def forecast_rcpy(model, warmup_data, forecast_length):
 
@@ -20,33 +21,30 @@ def forecast_rcpy(model, warmup_data, forecast_length):
 
 def multiple_forecasts_rcpy(
     data: dict,
-    model_config: dict,
-    forecast_length: int,
+    config: dict,
+    params: dict = None,
     seeds: list[int] = None,
-    num_realizations: int = 10,
-    system: str = None,  # Required when using seeds with JSON configs
-    reservoir_units: int = None,
-    params_path: str = None
+    params_path: str = None,
+    params_filename_template: str = "{system}_N{reservoir_units}_S{seed}_params.json",
 ) -> list:
     """
     Generate multiple forecasts using different reservoir seeds.
 
     Parameters
     ----------
-    model_config : dict
-        Shared hyperparameters (used only when seeds=None).
     data : dict
         Dictionary with 'train_data', 'train_target', and 'warmup_data'.
-    forecast_length : int
-        Number of forecast steps.
+    config : dict
+        Full experiment configuration (from config file).
+    params : dict, optional
+        Shared hyperparameters (used only when seeds is None).
     seeds : list of int, optional
-        List of seeds to use. If given, model_config will be loaded per seed from a JSON file.
-    num_realizations : int
-        Number of random forecasts to generate if seeds is None.
-    system : str
-        System name used to construct JSON filenames (only required if seeds is provided).
-    reservoir_units : int
-        Number of reservoir units used to construct JSON filenames.
+        List of seeds to use. If given, params will be loaded per seed from JSON.
+    params_path : str, optional
+        Directory where per-seed parameter JSON files are stored.
+    params_filename_template : str, optional
+        Template for per-seed JSON filenames. Can include {system}, {reservoir_units}, {seed}.
+        Default: "{system}_N{reservoir_units}_S{seed}_params.json"
 
     Returns
     -------
@@ -54,48 +52,55 @@ def multiple_forecasts_rcpy(
         Forecasts from each model instance.
     """
     forecasts = []
+    forecast_length = config["forecasting"]["length"]
+    num_realizations = config["forecasting"].get("num_reservoirs", 10)
+    system = config["system"]["name"]
+    reservoir_units = config["reservoir"]["units"]
 
     if seeds is None:
-        # Use same model_config and generate random seeds
+        assert params is not None, "params must be provided when seeds is None."
         for seed in random.sample(range(1_000_000), num_realizations):
-            config = model_config.copy()
-            config["seed"] = seed
-
-            model = create_model(model_config=config)
-            model.fit(data["train_data"], data["train_target"], warmup=240)
-
+            model_params = params.copy()
+            model_params["seed"] = seed
+            model = create_model(model_config=model_params)
+            model.fit(
+                data["train_data"][:-1],
+                data["train_data"][1:],
+                warmup=config["training"]["discard_training"],
+            )
             pred = forecast_rcpy(
                 model=model,
                 warmup_data=data["warmup_data"],
                 forecast_length=forecast_length,
             )
             forecasts.append(pred)
-
     else:
-        assert system is not None and reservoir_units is not None, \
-            "When using a list of seeds, 'system' and 'reservoir_units' must be provided."
-
         for seed in seeds:
+            filename = params_filename_template.format(
+                system=system, reservoir_units=reservoir_units, seed=seed
+            )
             if params_path is not None:
-                filename = f"{params_path}/{system}_N{reservoir_units}_S{seed}_params.json"
-            else:
-                filename = f"{system}_N{reservoir_units}_S{seed}_params.json"
-            with open(filename, "r") as file:
-                params = json.load(file)
+                filename = os.path.join(params_path, filename)
 
-            config = {
+            with open(filename, "r") as file:
+                loaded_params = json.load(file)
+
+            model_params = {
                 "reservoir_units": reservoir_units,
-                "p": params["p"],
-                "leak_rate": params["leak_rate"],
-                "spectral_radius": params["spectral_radius"],
-                "input_scaling": params["input_scaling"],
-                "alpha": params["alpha"],
-                "seed": seed
+                "p": loaded_params["p"],
+                "leak_rate": loaded_params["leak_rate"],
+                "spectral_radius": loaded_params["spectral_radius"],
+                "input_scaling": loaded_params["input_scaling"],
+                "alpha": loaded_params["alpha"],
+                "seed": seed,
             }
 
-            model = create_model(model_config=config)
-            model.fit(data["train_data"], data["train_target"], warmup=240)
-
+            model = create_model(model_config=model_params)
+            model.fit(
+                data["train_data"][:-1],
+                data["train_data"][1:],
+                warmup=config["training"]["discard_training"],
+            )
             pred = forecast_rcpy(
                 model=model,
                 warmup_data=data["warmup_data"],
@@ -104,3 +109,53 @@ def multiple_forecasts_rcpy(
             forecasts.append(pred)
 
     return forecasts
+
+
+
+def save_multiforecasts(forecasts: list, config: dict, seeds: list[int], mode: str = "per_seed", filename: str = None):
+    """
+    Save multiple forecasts to disk.
+
+    Parameters
+    ----------
+    forecasts : list of np.ndarray
+        List of forecast arrays (each shape: forecast_length,).
+    config : dict
+        Experiment configuration (must include system, reservoir, results).
+    seeds : list of int
+        Seeds corresponding to forecasts.
+    mode : str, optional
+        "per_seed" -> one file per seed
+        "single_file"   -> one file with all forecasts (rows = seeds, cols = time steps)
+    """
+    out_dir = os.path.join(config["results"]["output_dir"], "forecasts")
+    os.makedirs(out_dir, exist_ok=True)
+
+    system = config["system"]["name"]
+    units = config["reservoir"]["units"]
+
+    if mode == "per_seed":
+        for forecast, seed in zip(forecasts, seeds):
+            filename = f"{system}_N{units}_forecast_seed{seed}.csv"
+            filepath = os.path.join(out_dir, filename)
+
+            pd.DataFrame(forecast).to_csv(filepath, index=False, header=False)
+            print(f"✅ Saved forecast for seed {seed} to {filepath}")
+
+    elif mode == "single_file":
+        Y_matrix = np.array(forecasts).squeeze()
+        df = pd.DataFrame(
+            Y_matrix,
+            index=[f"seed{seed}" for seed in seeds],
+            columns=[f"t{i}" for i in range(Y_matrix.shape[1])]
+        )
+
+        if filename is None:
+            filename = f"{system}_N{units}_all_forecasts.csv"
+        filepath = os.path.join(out_dir, filename)
+        df.to_csv(filepath)
+
+        print(f"✅ Saved all forecasts to {filepath}")
+
+    else:
+        raise ValueError("mode must be 'per_seed' or 'single_file'")

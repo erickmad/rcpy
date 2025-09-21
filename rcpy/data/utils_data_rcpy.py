@@ -2,6 +2,60 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from reservoirpy.datasets import henon_map, logistic_map, mackey_glass
+from .data_retrieval import ClimateIndex, load_NOAA_data
+
+def generate_raw_data(config, system, seed=None):
+    """
+    Generate raw data according to the specified system.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration dictionary containing data parameters.
+        Must have keys: config["data"]["length"], config["data"]["transient"]
+    system : str
+        Name of the system: "random", "henon", "logistic", "constant"
+    seed : int, optional
+        Seed for random number generator (only used if system == "random")
+
+    Returns
+    -------
+    data : np.ndarray
+        Array of shape (data_length, 1) with the generated data.
+    """
+    data_length = config["data"].get("length")
+    transient = config["data"].get("transient", 0)
+    
+    if system == "constant":
+        data = np.zeros((data_length, 1))
+    
+    elif system == "henon":
+        full_data = henon_map(n_timesteps=data_length + transient)
+        data = full_data[transient:, 0].reshape(-1, 1)
+    
+    elif system == "logistic":
+        full_data = logistic_map(data_length + transient, r=4)
+        data = full_data[transient:, 0].reshape(-1, 1)
+    
+    elif system == "mackeyglass":
+        full_data = mackey_glass(n_timesteps=data_length + transient)
+        data = full_data[transient:, 0].reshape(-1, 1)
+    
+    elif system == "enso":
+        full_data = load_NOAA_data(ClimateIndex.NINO1870)['index']
+        data = full_data[:-12]
+
+    elif system == "random":
+        rng = np.random.default_rng(seed)
+        data = rng.uniform(-1, 1, (data_length, 1))
+    
+    else:
+        raise ValueError(f"Unknown system name: {system}")
+    
+    return data
+
+
 # ------------------------------------------------------------------
 # Load data and preprocess it with optional min-max normalization to [-1, 1]
 # ------------------------------------------------------------------

@@ -4,7 +4,7 @@ from optuna.samplers import TPESampler
 from rcpy.models import create_model
 from rcpy.forecasting import forecast_rcpy
 from rcpy.hypopt import standard_loss, soft_horizon_loss
-import json
+import json, os
 
 
 # 2) Define search_space
@@ -112,6 +112,9 @@ def convert_numpy(obj):
         raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 def save_best_params(study, filename):
+    
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+
     best_params = study.best_trial.params
     #best_params["seed"] = int(seed)  # ensure seed is a native int too
     with open(filename, "w") as f:
