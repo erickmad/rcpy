@@ -143,11 +143,22 @@ def save_multiforecasts(forecasts: list, config: dict, seeds: list[int], mode: s
             print(f"✅ Saved forecast for seed {seed} to {filepath}")
 
     elif mode == "single_file":
-        Y_matrix = np.array(forecasts).squeeze()
+        Y_matrix = np.array(forecasts)
+
+        # Ensure Y_matrix is 2D: (n_seeds, forecast_length)
+        if Y_matrix.ndim == 1:
+            # Only one forecast, make it (1, forecast_length)
+            Y_matrix = Y_matrix[np.newaxis, :]
+        elif Y_matrix.ndim == 3:
+            # Often (n_seeds, forecast_length, dim=1)
+            Y_matrix = Y_matrix.squeeze(-1)
+
+        n_seeds, n_steps = Y_matrix.shape
+        print("Y_matrix shape:", Y_matrix.shape)
         df = pd.DataFrame(
             Y_matrix,
             index=[f"seed{seed}" for seed in seeds],
-            columns=[f"t{i}" for i in range(Y_matrix.shape[1])]
+            columns=[f"t{i}" for i in range(n_steps)],
         )
 
         if filename is None:

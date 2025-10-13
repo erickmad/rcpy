@@ -3,7 +3,8 @@ import optuna
 from optuna.samplers import TPESampler
 from rcpy.models import create_model
 from rcpy.forecasting import forecast_rcpy
-from rcpy.hypopt import standard_loss, soft_horizon_loss
+#from rcpy.hypopt import standard_loss, soft_horizon_loss
+from rcpy.analysis import compute_skill
 import json, os
 
 
@@ -50,9 +51,11 @@ def get_loss(data, val_length, model_config, loss_function, seed):
     )
 
     if loss_function == "soft_horizon":
-        return soft_horizon_loss(data["val_data"], Y_pred, metric="rmse")
+        #return soft_horizon_loss(data["val_data"], Y_pred, metric="rmse")
+        return -compute_skill(data["val_data"], Y_pred, method="efh", threshold=0.2, softness=0.02)
     elif loss_function == "rmse":
-        return standard_loss(data["val_data"], Y_pred, metric="rmse")
+        #return standard_loss(data["val_data"], Y_pred, metric="rmse")
+        return compute_skill(data["val_data"], Y_pred, method="error", metric="rmse")
 
 # Building objective function
 def build_objective(data, val_length, reservoir_units, loss_function, seed):
