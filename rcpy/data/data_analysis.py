@@ -55,7 +55,7 @@ def analyze_basic_stats(series, window=24, plot=True):
 # ==================
 # 2. Autocorrelation
 # ==================
-def plot_autocorrelation(series, max_lag=60):
+def plot_autocorrelation(series, max_lag=60, scale=None):
     """
     Compute and plot autocorrelation function up to max_lag.
     """
@@ -65,6 +65,11 @@ def plot_autocorrelation(series, max_lag=60):
 
     plt.figure(figsize=(6,4))
     plt.stem(lags, ac)
+    if scale == 'semilog':
+        plt.yscale('symlog', linthresh=1e-2)
+    elif scale == 'loglog':
+        plt.yscale('log')
+        plt.xscale('log')
     plt.axhline(1/np.e, color='r', ls='--', label='1/e')
     plt.xlabel("Lag")
     plt.ylabel("Autocorrelation")
@@ -75,10 +80,74 @@ def plot_autocorrelation(series, max_lag=60):
     return pd.Series(ac, index=lags)
 
 
+# =========================
+# 2.5 Autocorrelation matrix
+# =========================
+def autocorr_matrix(data, cycle_length=12, max_lag=12):
+    """
+    Compute a cycle-based autocorrelation matrix for a 1D time series.
+    
+    Parameters
+    ----------
+    data : array-like
+        The 1D time series data (e.g., NINO3.4 index values).
+    cycle_length : int, optional (default=12)
+        Number of time steps in one full cycle (e.g., 12 for months, 4 for quarters, etc.).
+    max_lag : int, optional (default=12)
+        Maximum lag to compute correlations for.
+    
+    Returns
+    -------
+    corr_matrix : ndarray
+        A 2D array of shape (cycle_length, max_lag) containing the lag correlations.
+        Rows correspond to the starting position within a cycle, and
+        columns correspond to lags (1 to max_lag).
+    """
+
+    data = np.asarray(data).flatten()
+
+    # Remove incomplete cycles at the end
+    remainder = len(data) % cycle_length
+    if remainder != 0:
+        data = data[:-remainder]
+
+    # Reshape into full cycles
+    n_cycles = len(data) // cycle_length
+    reshaped = data.reshape(n_cycles, cycle_length)
+
+    corr_matrix = np.full((cycle_length, max_lag), np.nan)
+
+    # Compute lag correlations
+    for start_idx in range(cycle_length):
+        for lag in range(1, max_lag + 1):
+            x, y = [], []
+            for c in range(n_cycles):
+                if start_idx + lag < cycle_length:
+                    # Same cycle
+                    if c < n_cycles:
+                        x_val = reshaped[c, start_idx]
+                        y_val = reshaped[c, start_idx + lag]
+                    else:
+                        continue
+                else:
+                    # Wrap to next cycle
+                    if c + 1 < n_cycles:
+                        x_val = reshaped[c, start_idx]
+                        y_val = reshaped[c + 1, (start_idx + lag) % cycle_length]
+                    else:
+                        continue
+                x.append(x_val)
+                y.append(y_val)
+            if len(x) > 1:
+                corr_matrix[start_idx, lag - 1] = np.corrcoef(x, y)[0, 1]
+
+    return corr_matrix
+
+
 # =====================
 # 3. Power spectrum (FFT)
 # =====================
-def plot_power_spectrum(series, fs=1.0):
+def plot_power_spectrum(series, fs=1.0, scale=None):
     """
     Compute and plot power spectral density using a periodogram.
     fs: sampling frequency (1 for yearly, 12 for monthly data, etc.)
@@ -86,6 +155,9 @@ def plot_power_spectrum(series, fs=1.0):
     f, Pxx = signal.periodogram(series, fs=fs, window='hann', scaling='density')
     plt.figure(figsize=(6,4))
     plt.semilogy(f, Pxx)
+    if scale == 'loglog':
+        plt.xscale('log')
+        plt.yscale('log')
     plt.title("Power Spectrum (Periodogram)")
     plt.xlabel("Frequency [cycles per unit time]")
     plt.ylabel("Power spectral density")

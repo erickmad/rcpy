@@ -1,4 +1,5 @@
 import argparse
+from html import parser
 import yaml
 
 # -------------------------
@@ -14,9 +15,21 @@ def parse_args():
     )
     parser.add_argument(
         "--offset",
-        type=int,
+        type=float,
         default=None,
         help="Optional preprocessing offset"
+    )
+    parser.add_argument(
+        "--system",
+        type=str,
+        default=None,
+        help="Name of the dynamical system (e.g., lorenz, henon, ikeda). Overrides config if provided."
+    )
+    parser.add_argument(
+        "--data_length",
+        type=int,
+        default=None,
+        help="Length of the total data. Overrides config if provided."
     )
     return parser.parse_args()
 

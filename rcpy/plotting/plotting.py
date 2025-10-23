@@ -12,7 +12,7 @@ def plot_multiforecasts(true_data, forecasts, forecast_length=None):
         forecast_length = len(true_data)
 
     # Plot
-    fig = plt.figure(figsize=(8, 3.5))
+    fig = plt.figure(figsize=(7, 3))
     plt.plot(true_data[:forecast_length], label="Real Data", color="tab:blue", linewidth=2)
     # Plot each forecast in gray
     for forecast in forecasts:
@@ -22,5 +22,5 @@ def plot_multiforecasts(true_data, forecasts, forecast_length=None):
     plt.xlabel("Time")
     plt.ylabel("Value")
     plt.legend()
-    plt.tight_layout()
+    #plt.tight_layout()
     return fig

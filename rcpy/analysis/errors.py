@@ -63,3 +63,47 @@ def compute_errors(
             return float(np.sqrt(np.mean(diff ** 2)) / std_y)
     
     raise ValueError(f"Unknown metric '{metric}'.")
+
+def compute_cumulative_error(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    metric: str = "rmse"
+) -> np.ndarray:
+    """
+    Compute the cumulative mean forecast error (CME) over time.
+
+    This computes, for each forecast step t:
+        CME(t) = mean(error[0:t+1])
+    where error(t) is computed using your `compute_errors` function.
+
+    Parameters
+    ----------
+    y_true : np.ndarray
+        True values, shape (T, D)
+    y_pred : np.ndarray
+        Predicted values, same shape as y_true
+    metric : str, default="rmse"
+        Metric to use: "mse", "rmse", "mae", "nrmse"
+
+    Returns
+    -------
+    np.ndarray
+        Array of cumulative mean errors over time, shape (T,)
+    """
+    # Import your base error function
+    from rcpy.analysis import compute_errors
+
+    # Step 1: Compute per-timestep errors
+    per_step_errors = compute_errors(
+        y_true=y_true,
+        y_pred=y_pred,
+        metric=metric,
+        aggregate=False
+    )  # shape: (T,)
+
+    # Step 2: Compute cumulative mean error
+    cumulative_sum = np.cumsum(per_step_errors)
+    timesteps = np.arange(1, len(per_step_errors) + 1)
+    cumulative_mean_error = cumulative_sum / timesteps
+
+    return cumulative_mean_error

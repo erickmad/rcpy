@@ -40,13 +40,15 @@ def get_loss(data, val_length, model_config, loss_function, seed):
 
     #dim = data["train_data"].shape[1]
     model_config["seed"] = seed
+    washout_training = 300
+    warmup_training = 500
 
     model = create_model(model_config=model_config)
-    model.fit(data["train_data"][:-1], data["train_data"][1:], warmup=240)
+    model.fit(data["train_data"][:-1], data["train_data"][1:], warmup=washout_training)
 
     Y_pred = forecast_rcpy(
         model=model,
-        warmup_data=data['warmup_data'],
+        warmup_data=data['train_data'][-warmup_training:],
         forecast_length=val_length
     )
 
@@ -82,7 +84,7 @@ def run_optimization(study_name, db_file, objective_func, total_trials, timeout_
         load_if_exists = True
     else:  # Use in-memory study
         storage = None
-        study_name_final = None
+        study_name_final = study_name
         load_if_exists = False
 
     study = optuna.create_study(
