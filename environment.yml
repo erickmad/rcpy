@@ -1,0 +1,13 @@
+name: esn-enso
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - matplotlib
+  - notebook
+  - ipykernel
+  - pip
+  - pip:
+    - reservoirpy

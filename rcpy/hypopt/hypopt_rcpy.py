@@ -1,7 +1,7 @@
 import numpy as np
 import optuna
 from optuna.samplers import TPESampler
-from rcpy.models import create_model
+from rcpy.models import create_model, save_trained_model
 from rcpy.forecasting import forecast_rcpy
 #from rcpy.hypopt import standard_loss, soft_horizon_loss
 from rcpy.analysis import compute_skill
@@ -9,42 +9,59 @@ import json, os
 
 
 # 2) Define search_space
-def search_space(trial):
-    # Sample leak_rate
-    leak_rate = trial.suggest_float("leak_rate", 0.1, 1.0)
+def search_space(trial, reservoir_units, hypopt_config):
+    """
+    Sample hyperparameters for optimization based on config.
+    - hypopt_config: dictionary of hyperparameters from config["optimization"]["hyperparameters"]
+    """
 
-    # Compute lower bound
-    min_spectral_radius = max(1.0 - leak_rate, 1e-2)  # Avoid values ≥ 2
+    params = {}
 
-    # Guard against invalid ranges
-    if min_spectral_radius >= 2.0:
-        raise optuna.exceptions.TrialPruned()
+    for name, settings in hypopt_config.items():
 
-    spectral_radius = trial.suggest_float(
-        "spectral_radius",
-        min_spectral_radius,
-        1.5,
-        log=True
-    )
+        # 2️⃣ If 'fixed' key present in YAML config
+        if "fixed" in settings:
+            params[name] = settings["fixed"]
+            print(f"⚡ {name} fixed from YAML: {params[name]}")
+            continue
 
-    return {
-        "spectral_radius": spectral_radius,
-        "alpha": trial.suggest_float("alpha", 1e-7, 1e-2, log=True),
-        "leak_rate": leak_rate,
-        "input_scaling": trial.suggest_float("input_scaling", 0.1, 1.0),
-        "p": trial.suggest_float("p", 0.01, 0.1),
-    }
+        # 3️⃣ Otherwise sample according to defined range
+        low, high = map(float, settings["range"])
+        log_scale = settings.get("log", False)
+
+        # Validate
+        if low > high:
+            raise ValueError(f"Invalid range for {name}: low={low}, high={high}")
+
+        if log_scale and low <= 0:
+            raise ValueError(f"Log-scale hyperparameter {name} must have low > 0, got low={low}")
+
+        if log_scale:
+            params[name] = trial.suggest_float(name, low, high, log=True)
+        else:
+            params[name] = trial.suggest_float(name, low, high)
+
+        print(f"⚙️  {name} optimized: {params[name]:.4g}")
+
+    # Handle sparsity default
+    if "p" not in params:
+        params["p"] = 50 / (reservoir_units - 1)
+        print(f"⚙️  p fixed at {params['p']:.4g}")
+
+    return params
+
 
 # Forecasting function
 def get_loss(data, val_length, model_config, loss_function, seed):
 
     #dim = data["train_data"].shape[1]
     model_config["seed"] = seed
-    washout_training = 300
+    washout_training = 500
     warmup_training = 500
 
     model = create_model(model_config=model_config)
     model.fit(data["train_data"][:-1], data["train_data"][1:], warmup=washout_training)
+
 
     Y_pred = forecast_rcpy(
         model=model,
@@ -60,11 +77,16 @@ def get_loss(data, val_length, model_config, loss_function, seed):
         return compute_skill(data["val_data"], Y_pred, method="error", metric="rmse")
 
 # Building objective function
-def build_objective(data, val_length, reservoir_units, loss_function, seed):
+def build_objective(data, val_length, reservoir_units, loss_function, seed, hypopt_config):
+
     def objective(trial):
-        hyperparams = search_space(trial)
+        # 1️⃣ Get hyperparameters from search space
+        hyperparams = search_space(trial, reservoir_units, hypopt_config)
+
+        # 2️⃣ Always include reservoir size
         hyperparams["reservoir_units"] = reservoir_units
 
+        # 3️⃣ Compute loss
         loss = get_loss(data, val_length, hyperparams, loss_function, seed)
 
         trial.report(loss, step=0)
@@ -72,11 +94,13 @@ def build_objective(data, val_length, reservoir_units, loss_function, seed):
             raise optuna.exceptions.TrialPruned()
 
         return loss
+
     return objective
 
 
+
 def run_optimization(study_name, db_file, objective_func, total_trials, timeout_hours):
-    sampler = optuna.samplers.TPESampler(multivariate=True)
+    sampler = optuna.samplers.TPESampler(multivariate=True, warn_independent_sampling=False)
 
     if db_file:  # Save to disk if db_file is provided
         storage = f"sqlite:///{db_file}"

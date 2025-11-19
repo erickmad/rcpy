@@ -4,6 +4,7 @@ import pandas as pd
 
 from reservoirpy.datasets import henon_map, logistic_map, mackey_glass
 from .data_retrieval import ClimateIndex, load_NOAA_data
+#import tsdynamics as tsd
 
 def generate_raw_data(config, system, seed=None):
     """
@@ -24,8 +25,8 @@ def generate_raw_data(config, system, seed=None):
     data : np.ndarray
         Array of shape (data_length, 1) with the generated data.
     """
-    data_length = config["data"].get("length")
-    transient = config["data"].get("transient", 0)
+    data_length = config["system"].get("data_length")
+    transient = config["preprocessing"].get("data_transient", 0)
     
     if system == "constant":
         data = np.zeros((data_length, 1))
@@ -89,7 +90,6 @@ def preprocess_data_rcpy(
     init_discard=0,
     train_length=500,
     val_length=500,
-    warmup_length=300,
     normalize=True,
 ):
     """
@@ -105,16 +105,13 @@ def preprocess_data_rcpy(
         Length of the training set (default: 500).
     val_length : int, optional
         Length of the validation set (default: 500).
-    warmup_length : int, optional
-        Length of the warmup set, which ends with val_data and starts
-        warmup_length steps earlier (default: 300).
     normalize : bool, optional
         Whether to scale features to [-1, 1] using training data (default: True).
 
     Returns
     -------
     dict
-        Dictionary with training, validation, test, and warmup splits,
+        Dictionary with training, validation and test splits,
         as well as normalization parameters.
     """
 
@@ -135,17 +132,12 @@ def preprocess_data_rcpy(
     val_data = data[train_end:val_end]
     test_data = data[val_end:]
 
-    # Warmup ends at val_end and starts warmup_length before
-    warmup_start = max(0, val_end - warmup_length)
-    warmup_data = data[warmup_start:val_end]
-
     # Normalization (based on training data)
     if normalize:
         scale, train_min, train_max = make_scaler(train_data)
         train_data = scale(train_data)
         val_data = scale(val_data)
         test_data = scale(test_data)
-        warmup_data = scale(warmup_data)
     else:
         train_min, train_max = None, None
 
@@ -153,7 +145,6 @@ def preprocess_data_rcpy(
         "train_data": train_data,
         "val_data": val_data,
         "test_data": test_data,
-        "warmup_data": warmup_data,
         "train_min": train_min,
         "train_max": train_max,
     }
@@ -170,66 +161,36 @@ def denormalize_data_rcpy(x_scaled, train_min, train_max):
     return 0.5 * (x_scaled + 1) * (train_max - train_min) + train_min
 
 
-def plot_preprocessed_data_rcpy(
-    data_raw,
-    data,
-    init_transient,
-    transient_length,
-    train_length,
-    warmup_length,
-    system_name="System",
-    dates=None,
-):
+
+def ulam_map_series(x0: float, n_steps: int, discard: int = 100) -> np.ndarray:
     """
-    Plot preprocessed data sections for one or more variables.
+    Generate a time series from the Ulam map: x_{n+1} = 1 - 2x_n^2.
     
-    Parameters:
-    - data_raw: ndarray of shape (T,) or (T, D)
-    - data: dict with keys like 'transient_data', 'train_data', etc.
-    - init_transient, transient_length, train_length, warmup_length: int
-    - system_name: str, title of the plot
-    - dates: optional array-like of length T (e.g., pd.date_range)
+    Parameters
+    ----------
+    x0 : float
+        Initial condition (should be in [-1, 1]).
+    n_steps : int
+        Number of time steps to return (after discarding transients).
+    discard : int, optional
+        Number of initial transient iterations to discard (default = 100).
+    
+    Returns
+    -------
+    series : np.ndarray
+        Array of length n_steps containing the Ulam map time series.
     """
-    data_raw = np.atleast_2d(data_raw)
-    if data_raw.shape[0] < data_raw.shape[1]:
-        data_raw = data_raw.T  # ensure shape (T, D)
+    # Ensure initial condition is within valid range
+    x = np.clip(x0, -1.0, 1.0)
     
-    T, D = data_raw.shape
-    if dates is None:
-        dates = np.arange(T)
+    # Burn-in phase to remove transients
+    for _ in range(discard):
+        x = 1 - 2 * x**2
     
-    # Compute time indices for each section
-    transient_start = init_transient
-    transient_end = transient_start + transient_length
-    train_start = transient_end
-    train_end = train_start + train_length
-    warmup_start = train_end - warmup_length
-    warmup_end = warmup_start + warmup_length
-    validation_start = warmup_end
-    validation_end = validation_start + data['val_data'].shape[0]
-
-    # Plot
-    fig, axs = plt.subplots(D, 1, figsize=(9, 3 * D), sharex=True)
-    axs = np.atleast_1d(axs)  # ensure it's iterable even if D = 1
-
-    for i in range(D):
-        ax = axs[i]
-        ax.plot(dates, data_raw[:, i], color='lightgray', lw=2, label='Raw Data')
-        ax.plot(dates[transient_start:transient_end], data['transient_data'][:, i], lw=2, label='transient data', color='orange')
-        ax.plot(dates[train_start:train_end], data['train_data'][:, i], lw=2, label='training data', color='blue')
-        ax.plot(dates[warmup_start:warmup_end], data['warmup_data'][:, i], lw=5, alpha=0.5, label='warm-up data', color='green')
-        ax.plot(dates[validation_start:validation_end], data['val_data'][:, i], lw=2, label='validation data', color='red')
-
-        # Boundaries
-        for x in [dates[transient_start], dates[train_start], dates[train_end], dates[warmup_end]]:
-            ax.axvline(x=x, color='gray', linestyle='--', lw=1)
-
-        ax.set_ylabel(f'Variable {i+1}')
-        #ax.legend(loc='lower left')
-
-    axs[-1].set_xlabel('Time Step' if isinstance(dates[0], (int, np.integer)) else 'Date')
-    fig.suptitle(f'Data preprocessing for {system_name}', fontsize=12)
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
-    plt.show()
-    return fig
-
+    # Generate the actual series
+    series = np.empty(n_steps)
+    for i in range(n_steps):
+        x = 1 - 2 * x**2
+        series[i] = x
+    
+    return series

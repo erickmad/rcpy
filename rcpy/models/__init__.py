@@ -1,1 +1,1 @@
-from .models_rcpy import create_model
+from .models_rcpy import create_model, save_trained_model, load_trained_model

@@ -1,11 +1,13 @@
 import numpy as np
-from rcpy.models import create_model
 import random, json, os
 import pandas as pd
 
-def forecast_rcpy(model, warmup_data, forecast_length):
+from rcpy.models import create_model, load_trained_model
+from rcpy.training import train_model
 
-    dim = 1
+
+def forecast_rcpy(model, warmup_data, forecast_length, dim=1):
+
     # Warm up the model
     warmup_y = model.run(warmup_data, reset=True)
 
@@ -19,21 +21,32 @@ def forecast_rcpy(model, warmup_data, forecast_length):
     return Y_pred
 
 
+
 def multiple_forecasts_rcpy(
     data: dict,
+    warmup_data: np.ndarray,
     config: dict,
     params: dict = None,
     seeds: list[int] = None,
     params_path: str = None,
     params_filename_template: str = "{system}_N{reservoir_units}_S{seed}_params.json",
+    load_trained: bool = False,       # <-- control whether to load saved models
+    model_path_template: str = None,  # <-- new optional argument
+    offset: int = 0,                # <-- add
+    loss_function: str = "none",    # <-- add
 ) -> list:
     """
-    Generate multiple forecasts using different reservoir seeds.
+    Generate multiple forecasts using different reservoir seeds or pre-trained models.
+
+    If `load_trained=True`, this will attempt to load a pre-trained model from
+    `model_path_template` (one per seed). Otherwise, it will create and train new models.
 
     Parameters
     ----------
     data : dict
-        Dictionary with 'train_data', 'train_target', and 'warmup_data'.
+        Dictionary with 'train_data' and 'val_data'.
+    warmup_length : int
+        Length of warmup data to use before forecasting.
     config : dict
         Full experiment configuration (from config file).
     params : dict, optional
@@ -45,6 +58,11 @@ def multiple_forecasts_rcpy(
     params_filename_template : str, optional
         Template for per-seed JSON filenames. Can include {system}, {reservoir_units}, {seed}.
         Default: "{system}_N{reservoir_units}_S{seed}_params.json"
+    model_path_template : str, optional
+        Template for pre-trained model filenames. Can include {system}, {reservoir_units}, {seed}.
+        Required if load_trained=True.
+    load_trained : bool, optional
+        If True, load pre-trained models from disk instead of training new ones.
 
     Returns
     -------
@@ -57,27 +75,43 @@ def multiple_forecasts_rcpy(
     system = config["system"]["name"]
     reservoir_units = config["reservoir"]["units"]
 
+
+    if load_trained:
+        assert model_path_template is not None, "Must provide model_path_template when load_trained=True."
+        for seed in seeds:
+            model_filename = model_path_template.format(
+                system=system, reservoir_units=reservoir_units, seed=seed, offset=offset, loss_function=loss_function
+            )
+            print(f"🔹 Loading trained model from: {model_filename}")
+            model = load_trained_model(model_filename)
+
+            pred = forecast_rcpy(
+                model=model,
+                warmup_data=warmup_data,
+                forecast_length=forecast_length,
+            )
+            forecasts.append(pred)
+        return forecasts
+
+    # Otherwise, fall back to the existing behavior (training new models)
     if seeds is None:
         assert params is not None, "params must be provided when seeds is None."
         for seed in random.sample(range(1_000_000), num_realizations):
             model_params = params.copy()
             model_params["seed"] = seed
             model = create_model(model_config=model_params)
-            model.fit(
-                data["train_data"][:-1],
-                data["train_data"][1:],
-                warmup=config["training"]["discard_training"],
-            )
+            model = train_model(model, data, forecasting_step=1, washout_training=config["training"]["discard_training"])
+
             pred = forecast_rcpy(
                 model=model,
-                warmup_data=data["warmup_data"],
+                warmup_data=warmup_data,
                 forecast_length=forecast_length,
             )
             forecasts.append(pred)
     else:
         for seed in seeds:
             filename = params_filename_template.format(
-                system=system, reservoir_units=reservoir_units, seed=seed
+                system=system, reservoir_units=reservoir_units, seed=seed, offset=offset, loss_function=loss_function
             )
             if params_path is not None:
                 filename = os.path.join(params_path, filename)
@@ -93,23 +127,21 @@ def multiple_forecasts_rcpy(
                 "input_scaling": loaded_params["input_scaling"],
                 "alpha": loaded_params["alpha"],
                 "seed": seed,
+                
             }
 
             model = create_model(model_config=model_params)
-            model.fit(
-                data["train_data"][:-1],
-                data["train_data"][1:],
-                warmup=config["training"]["discard_training"],
-            )
+
+            model = train_model(model, data, forecasting_step=1, washout_training=config["training"]["discard_training"])
+            
             pred = forecast_rcpy(
                 model=model,
-                warmup_data=data["warmup_data"],
+                warmup_data=warmup_data,
                 forecast_length=forecast_length,
             )
             forecasts.append(pred)
 
-    return forecasts
-
+    return np.array(forecasts)
 
 
 def save_multiforecasts(forecasts: list, config: dict, seeds: list[int], mode: str = "per_seed", filename: str = None):
