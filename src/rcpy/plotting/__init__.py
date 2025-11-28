@@ -1,1 +1,1 @@
-from .plotting import plot_multiforecasts
+from .plotting import plot_forecast, plot_multiforecasts

@@ -2,17 +2,17 @@ import numpy as np
 from reservoirpy.nodes import Reservoir, Ridge
 import os, pickle
 
-def create_model(model_config):
+def create_model(hyperparams, output_dim=1):
     reservoir = Reservoir(
-        units=model_config['reservoir_units'],
-        sr=model_config['spectral_radius'],
-        rc_connectivity=model_config['p'],
-        lr=model_config['leak_rate'],
-        input_scaling=model_config['input_scaling'],
-        seed=model_config['seed'],
-        input_bias=False
+        units=hyperparams['reservoir_units'],
+        sr=hyperparams['spectral_radius'],
+        rc_connectivity=hyperparams['p'],
+        lr=hyperparams['leak_rate'],
+        input_scaling=hyperparams['input_scaling'],
+        seed=hyperparams['seed'],
+        bias=False
     )
-    readout = Ridge(ridge=model_config['alpha'], output_dim=1)
+    readout = Ridge(ridge=hyperparams['alpha'], output_dim=output_dim)
 
     return reservoir >> readout
 

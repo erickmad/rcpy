@@ -2,13 +2,15 @@ name: esn-enso
 channels:
   - conda-forge
 dependencies:
-  - python=3.10
+  - python=3.10.15
   - numpy
   - pandas
   - matplotlib
   - notebook
   - ipykernel
+  - jupyter
   - optuna
+  - plotly
   - pip
   - pip:
-    - reservoirpy
+      - reservoirpy

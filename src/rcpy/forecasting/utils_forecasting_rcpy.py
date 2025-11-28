@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 # ================================
@@ -83,3 +84,48 @@ def filter_forecasts(
 
     return filtered_forecasts, filtered_indices, filtered_scores
 
+# ================================
+# 2. Plotting multiple forecasts
+# ================================
+def plot_multiforecasts(true_data, forecasts, forecast_length=None, dim=0):
+    """
+    Plot multiple forecasts with optional ensemble mean.
+
+    Parameters
+    ----------
+    true_data : np.ndarray
+        True data, shape (T,) or (T, D)
+    forecasts : np.ndarray
+        Forecasts array, shape (N, T, D)
+    forecast_length : int, optional
+        Number of timesteps to plot. Defaults to length of true_data.
+    dim : int, optional
+        Which dimension to plot if D > 1 (default: 0)
+    """
+
+    # Select the desired dimension
+    forecasts = forecasts[:, :, dim]  # shape (N, T)
+    if true_data.ndim > 1:
+        true_data = true_data[:, dim]
+
+    mean_forecast = np.mean(forecasts, axis=0)
+
+    if forecast_length is None:
+        forecast_length = len(true_data)
+
+    # Plot
+    fig = plt.figure(figsize=(7, 3))
+    plt.plot(true_data[:forecast_length], label="Real Data", color="tab:blue", linewidth=2)
+
+    # Plot each forecast in gray
+    for forecast in forecasts:
+        plt.plot(forecast[:forecast_length], color='tab:gray', lw=0.5, alpha=0.1, zorder=0)
+
+    # Plot ensemble mean
+    plt.plot(mean_forecast[:forecast_length], label='Mean Forecast', color='tab:orange')
+
+    plt.xlabel("Time")
+    plt.ylabel("Value")
+    plt.legend()
+    #plt.tight_layout()
+    return fig

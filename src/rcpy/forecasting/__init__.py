@@ -1,5 +1,5 @@
 from .forecasting_rcpy import forecast_rcpy
-from .forecasting_rcpy import multiple_forecasts_rcpy, save_multiforecasts
+from .forecasting_rcpy import multiple_forecasts_rcpy
 from .dummy_forecasts import make_persistence_forecast
 
-from .utils_forecasting_rcpy import filter_forecasts
+from .utils_forecasting_rcpy import filter_forecasts, plot_multiforecasts

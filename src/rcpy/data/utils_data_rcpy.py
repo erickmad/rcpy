@@ -136,7 +136,7 @@ def preprocess_data_rcpy(
     if normalize:
         scale, train_min, train_max = make_scaler(train_data)
         train_data = scale(train_data)
-        val_data = scale(val_data)
+        val_data = scale(val_data) if len(val_data) > 0 else val_data
         test_data = scale(test_data)
     else:
         train_min, train_max = None, None
@@ -159,38 +159,3 @@ def denormalize_data_rcpy(x_scaled, train_min, train_max):
         raise ValueError("Shape mismatch: x_scaled and train_min/max must have matching number of features.")
     
     return 0.5 * (x_scaled + 1) * (train_max - train_min) + train_min
-
-
-
-def ulam_map_series(x0: float, n_steps: int, discard: int = 100) -> np.ndarray:
-    """
-    Generate a time series from the Ulam map: x_{n+1} = 1 - 2x_n^2.
-    
-    Parameters
-    ----------
-    x0 : float
-        Initial condition (should be in [-1, 1]).
-    n_steps : int
-        Number of time steps to return (after discarding transients).
-    discard : int, optional
-        Number of initial transient iterations to discard (default = 100).
-    
-    Returns
-    -------
-    series : np.ndarray
-        Array of length n_steps containing the Ulam map time series.
-    """
-    # Ensure initial condition is within valid range
-    x = np.clip(x0, -1.0, 1.0)
-    
-    # Burn-in phase to remove transients
-    for _ in range(discard):
-        x = 1 - 2 * x**2
-    
-    # Generate the actual series
-    series = np.empty(n_steps)
-    for i in range(n_steps):
-        x = 1 - 2 * x**2
-        series[i] = x
-    
-    return series
