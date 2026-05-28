@@ -45,3 +45,7 @@ dmypy.json
 # PyInstaller
 *.manifest
 *.spec
+
+# Data and folders
+*.npy
+.notebooks/

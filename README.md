@@ -1,30 +1,46 @@
 # Reservoir Computing with Reservoirpy
 
+## Description
+
+Code to perform time series forecasts using Echo State Networks: building the reservoir, training the readout layer adn performing the forecasts in iterative mode.
+
+## Installation
+
+On the project's root folder: run
+
+```shell
+pip install -e .
+```
+
+
+
 ## Structure of project
 
-```
+```shell
 rcpy/
 │
-├── rcpy/
-│ ├── __init__.py
-│ ├── data/
-│ │ ├── __init__.py
-│ │ ├── data_retrieval.py
-│ │ └── utils_data.py
-│ └── forecasting/
-│ ├── __init__.py
-│ ├── forecasting_rcpy.py
-│ └── utils_forecasting_rcpy.py
+├── src/
+│   └── rcpy/
+│      ├── analysis/
+│      ├── data/
+│      ├── enso/
+│      ├── forecasting/
+│      ├── hypopt/
+│      ├── minimal_esn/
+│      ├── models/
+│      ├── plotting/
+│      ├── setup_experiments/
+│      ├── training/
+│      └── utilities/
 │
 ├── notebooks/
-│ └── demo_notebook.ipynb
+│   └── demo_notebooks.ipynb
 │
+├── environment.yml
 ├── setup.py
-├──  requirements.txt
+├── requirements.txt
 └── README.md
 ```
-
-
 
 ## Questions
 
