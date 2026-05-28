@@ -34,24 +34,24 @@ def plot_forecast(Y_pred, Y_true, efh, rmse_cumulative, corr_cumulative, plot_cu
     ax1 = fig.add_subplot(gs[0, :])
     ax1.plot(Y_true[:plot_cutoff], label='True')
     ax1.plot(Y_pred[:plot_cutoff], label='Predicted')
-    ax1.axvline(efh, color='tab:red', linestyle='--', label='EFH')
+    ax1.axvline(efh, color='tab:red', linestyle='--', label=f'EFH: {efh:.2f}')
     ax1.set_title(title)
     ax1.legend()
     
     # Bottom-left: RMSE
     ax2 = fig.add_subplot(gs[1, 0])
     ax2.plot(rmse_cumulative[:plot_cutoff], color="tab:olive")
-    ax2.axvline(efh, color='tab:red', linestyle='--', label='EFH')
+    ax2.axvline(efh, color='tab:red', linestyle='--')
     ax2.set_title(f'rmse: {rmse_cumulative[plot_cutoff]:.2f}')
     
     # Bottom-right: Correlation
     ax3 = fig.add_subplot(gs[1, 1])
     ax3.plot(corr_cumulative[:plot_cutoff], color="tab:cyan")
-    ax3.axvline(efh, color='tab:red', linestyle='--', label='EFH')
+    ax3.axvline(efh, color='tab:red', linestyle='--')
     ax3.set_title(f'corr: {corr_cumulative[plot_cutoff]:.2f}')
     
     plt.tight_layout()
-    plt.show()
+    return fig
 
 
 def plot_multiforecasts(true_data, forecasts, forecast_length=None):

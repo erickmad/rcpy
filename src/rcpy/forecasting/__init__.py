@@ -3,3 +3,4 @@ from .forecasting_rcpy import multiple_forecasts_rcpy
 from .dummy_forecasts import make_persistence_forecast
 
 from .utils_forecasting_rcpy import filter_forecasts, plot_multiforecasts
+from .utils_forecasting_rcpy import persistence_forecast

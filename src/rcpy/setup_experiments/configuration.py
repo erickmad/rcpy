@@ -28,7 +28,7 @@ class ReservoirConfig:
     leak_rate: float
     input_scaling: float
     spectral_radius: Optional[float] = None
-    reservoir_units: Optional[int] = 200
+    reservoir_units: Optional[int] = 0
     alpha: Optional[float] = None
     seed: Optional[int] = None
 
@@ -75,7 +75,7 @@ def parse_args():
     )
     parser.add_argument(
         "--offset",
-        type=float,
+        type=int,
         default=None,
         help="Optional preprocessing offset"
     )
@@ -86,10 +86,22 @@ def parse_args():
         help="Name of the dynamical system (e.g., lorenz, henon, ikeda). Overrides config if provided."
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for reproducibility. Overrides config if provided."
+    )
+    parser.add_argument(
         "--data_length",
         type=int,
         default=None,
         help="Length of the total data. Overrides config if provided."
+    )
+    parser.add_argument(
+        "--train_length",
+        type=int,
+        default=None,
+        help="Length of the training data. Overrides config if provided."
     )
     parser.add_argument(
         "--reservoir_units",
@@ -97,6 +109,35 @@ def parse_args():
         default=None,
         help="Number of reservoir units. Overrides config if provided."
     )
+
+    parser.add_argument(
+        "--noise",
+        type=float,
+        default=None,
+        help="Observational noise standard deviation. Overrides config if provided."
+    )
+
+    parser.add_argument(
+        "--ds",
+        type=int,
+        default=None,
+        help="Data resolution (downsampling factor). Overrides config if provided."
+    )
+
+    parser.add_argument(
+        "--tau",
+        type=float,
+        default=None,
+        help="Delay tau for delay-coordinate embedding. Overrides config if provided."
+    )
+
+    parser.add_argument(
+        "--K",
+        type=int,
+        default=None,
+        help="Number of variables for Lorenz96. Overrides config if provided."
+    )
+
     return parser.parse_args()
 
 # -------------------------
@@ -106,3 +147,34 @@ def load_config(path):
     with open(path, "r") as f:
         return yaml.safe_load(f)
 
+
+# -------------------------
+# 3. Apply CLI overrides
+# -------------------------
+def apply_cli_overrides(args, config):
+    """
+    Override config values with CLI arguments if provided.
+    Supports nested keys with dot notation.
+    """
+    overrides = {
+        "system":          ("system.name", str),
+        "data_length":     ("preprocessing.data_length", int),
+        "train_length":    ("preprocessing.train_length", int),
+        "reservoir_units": ("reservoir.units", int),
+        "offset":          ("preprocessing.offset", int),
+        "noise":           ("preprocessing.noise", float),
+        "ds":              ("preprocessing.downsampling", int),
+        "tau":             ("system.tau", float),
+        "K":               ("system.K", int),
+        "seed":            ("system.seed", int)
+    }
+
+    for arg_name, (config_path, cast) in overrides.items():
+        arg_value = getattr(args, arg_name, None)
+        if arg_value is not None:
+            keys = config_path.split(".")
+            cfg = config
+            for key in keys[:-1]:
+                cfg = cfg.setdefault(key, {})
+            cfg[keys[-1]] = cast(arg_value)
+            print(f"⚡ Overriding \"{config_path}\" with CLI value: {arg_value}")

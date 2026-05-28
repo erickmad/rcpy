@@ -1,6 +1,40 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+# ================================
+# 0. Utilities to make forecasts
+# ================================
+def persistence_forecast(truth, n_leads):
+    """
+    Build a hindcast-style persistence forecast matrix from truth.
+    
+    Parameters
+    ----------
+    truth : array-like, shape (T,)
+        Observed time series (1D).
+    n_leads : int
+        Number of lead times (columns) for the forecast matrix.
+    
+    Returns
+    -------
+    forecast : ndarray, shape (n_inits, n_leads)
+        Persistence forecasts where forecast[i, l] = truth[i].
+        n_inits = len(truth) - n_leads
+    """
+    truth = np.asarray(truth).flatten()
+    if n_leads < 1:
+        raise ValueError("n_leads must be >= 1")
+    n_inits = len(truth) - n_leads
+    if n_inits <= 0:
+        raise ValueError("truth is too short for the requested n_leads")
+
+    # persistence: forecast value at all leads equals value at initialization time truth[i]
+    forecast = np.empty((n_inits, n_leads), dtype=float)
+    init_values = truth[:n_inits]                 # values at initialization times (t = 0 .. n_inits-1)
+    forecast[:] = init_values[:, np.newaxis]      # broadcast so each row repeats the init value across leads
+
+    return forecast
+
 
 # ================================
 # 1. Utilities to filter forecasts
@@ -15,9 +49,10 @@ def is_stable_forecast(forecast, max_abs_value=1e3):
 def filter_forecasts(
     forecasts,
     max_abs_value=1e3,
-    method="zscore",        # "zscore" or "iqr"
+    method=None,        # "zscore" or "iqr"
     z_thresh=2.5,           # |z| threshold for outlier rejection
-    iqr_k=1.5               # multiplier for IQR method
+    iqr_k=1.5,               # multiplier for IQR method
+    forecast_length=None
 ):
     """
     Filter forecasts by:
@@ -30,12 +65,15 @@ def filter_forecasts(
         List of forecast sequences (1D arrays).
     max_abs_value : float
         Threshold for detecting exploding values.
-    method : {"zscore", "iqr"}
+    method : {"zscore", "iqr", "none", None}
         Method for filtering forecasts by dispersion.
+        If "none" or None, only stability filtering is applied.
     z_thresh : float
         Threshold for z-score filtering (e.g. 2.5).
     iqr_k : float
         Multiplier for IQR range (e.g. 1.5).
+    forecast_length : int, optional
+        Number of timesteps to consider.
 
     Returns
     -------
@@ -46,6 +84,9 @@ def filter_forecasts(
     scores : list of float
         Dispersion scores (variance) of each kept forecast.
     """
+
+    if forecast_length is not None:
+        forecasts = [f[:forecast_length] for f in forecasts]
 
     # Step 1: Stability filter
     stable_forecasts, stable_indices = [], []
@@ -61,7 +102,10 @@ def filter_forecasts(
     dispersions = np.array([np.var(f) for f in stable_forecasts])
 
     # Step 3: Apply filtering method
-    if method.lower() == "zscore":
+    if method is None or method.lower() == "none":
+        keep_mask = np.ones_like(dispersions, dtype=bool)
+
+    elif method.lower() == "zscore":
         mean = np.mean(dispersions)
         std = np.std(dispersions)
         z_scores = (dispersions - mean) / (std + 1e-12)
@@ -75,14 +119,14 @@ def filter_forecasts(
         keep_mask = (dispersions >= lower) & (dispersions <= upper)
 
     else:
-        raise ValueError("method must be either 'zscore' or 'iqr'")
+        raise ValueError("method must be 'zscore', 'iqr', or 'none'")
 
     # Step 4: Filter
     filtered_forecasts = [f for f, keep in zip(stable_forecasts, keep_mask) if keep]
     filtered_indices = [i for i, keep in zip(stable_indices, keep_mask) if keep]
     filtered_scores = [v for v, keep in zip(dispersions, keep_mask) if keep]
 
-    return filtered_forecasts, filtered_indices, filtered_scores
+    return np.array(filtered_forecasts), filtered_indices, filtered_scores
 
 # ================================
 # 2. Plotting multiple forecasts

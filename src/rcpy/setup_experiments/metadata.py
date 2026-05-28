@@ -1,12 +1,12 @@
 from pathlib import Path
 import shutil
 import json
-import sys
+import sys, os
 import platform
 import subprocess
 from datetime import datetime
 
-def collect_metadata(config, config_path, extra_metadata=None, experiment_id=None):
+def collect_metadata(config, config_path, extra_metadata=None, experiment_id=None, output_path=None):
     """
     Save experiment metadata in a JSON file and copy the config file for record-keeping.
     
@@ -52,9 +52,14 @@ def collect_metadata(config, config_path, extra_metadata=None, experiment_id=Non
         metadata.update(extra_metadata)
 
     # Save metadata
-    metadata_path = out_dir / "metadata.json"
-    with open(metadata_path, "w") as f:
+    system = config["system"]["name"]
+    reservoir_units = config["reservoir"]["units"]
+    offset = config["preprocessing"]["offset"]
+    #data_length = config["preprocessing"]["data_length"]
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
         json.dump(metadata, f, indent=4)
 
-    print(f"📝 Metadata saved to {metadata_path}")
+    print(f"📝 Metadata saved to {output_path}")
 

@@ -57,13 +57,31 @@ def expected_forecast_horizon(
     return float(H)
 
 
+# ==================================
+# 1.5 Valid Prediction Time (VPT)
+# ==================================
+def _compute_vpt(y_t, y_p, metric, threshold):
+    # per-step error (no aggregation!)
+    errors = compute_errors(y_t, y_p, metric=metric, aggregate=False)
+    # errors shape: (T,) or (T, D) → reduce over D if needed
+    if errors.ndim > 1:
+        errors = np.mean(errors, axis=1)
+
+    valid = errors < threshold
+
+    # VPT = number of consecutive True from start
+    if not np.any(~valid):
+        return len(valid)
+    return np.argmax(~valid)
+
+
 # ================
 # 2. Compute Skill
 # ================
 def compute_skill(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-    method: str = "error",             # "error", "reference", "pearson", "acc"
+    method: str = "error",             # "error", "reference", "pearson", "acc", "efh", "vpt"
     reference: np.ndarray | None = None,
     metric: str = "rmse",              # used for "error" or "reference"
     forecast_length: int | None = None,
@@ -81,7 +99,7 @@ def compute_skill(
     y_pred : np.ndarray
         Predicted values (T, D)
     method : str
-        "error", "reference", "pearson", "acc"
+        "error", "reference", "pearson", "acc", "efh", "vpt"
     reference : np.ndarray, optional
         Reference forecast for method="reference"
     metric : str
@@ -133,6 +151,10 @@ def compute_skill(
             if threshold is None or softness is None:
                 raise ValueError("Both 'threshold' and 'softness' must be provided for EFH method.")
             return expected_forecast_horizon(y_t, y_p, metric=metric, threshold=threshold, softness=softness)
+        elif method == "vpt":
+            if threshold is None:
+                raise ValueError("Threshold must be provided for method='vpt'.")
+            return _compute_vpt(y_t, y_p, metric, threshold)
         else:
             raise ValueError(f"Unknown method '{method}'")
 
@@ -181,7 +203,7 @@ def skill_matrix(
     forecast,
     truth,
     cycle_length=12,
-    max_lag=None,
+    max_lead=None,
     method="pearson",             # corresponds to compute_skill(method)
     metric="rmse",                # used only for error-based methods
     reference=None,               # optional reference forecast
@@ -201,7 +223,7 @@ def skill_matrix(
         True observed time series aligned in time with forecast targets.
     cycle_length : int, optional (default=12)
         Number of time steps in one full cycle (e.g., 12 for months).
-    max_lag : int, optional
+    max_lead : int, optional
         Maximum forecast lead time to include. If None, uses all leads.
     method : str, optional (default="pearson")
         Skill computation method for `compute_skill()`
@@ -217,7 +239,7 @@ def skill_matrix(
 
     Returns
     -------
-    skill : ndarray, shape (cycle_length, max_lag)
+    skill : ndarray, shape (cycle_length, max_lead)
         Skill matrix where rows correspond to initialization month
         (0 = first month in the cycle), and columns correspond to lead times.
     """
@@ -226,30 +248,30 @@ def skill_matrix(
     truth = np.asarray(truth).flatten()
 
     n_inits, n_leads = forecast.shape
-    if max_lag is None:
-        max_lag = n_leads
+    if max_lead is None:
+        max_lead = n_leads
     else:
-        max_lag = min(max_lag, n_leads)
+        max_lead = min(max_lead, n_leads)
 
-    skill = np.full((cycle_length, max_lag), np.nan)
+    skill = np.full((cycle_length, max_lead), np.nan)
 
     for start_idx in range(cycle_length):
         # Initialization indices for this month
         init_indices = np.arange(start_idx, n_inits, cycle_length)
 
-        for lag in range(max_lag):
+        for lead in range(max_lead):
             f_vals, t_vals = [], []
 
             for i in init_indices:
-                if i + lag + 1 < len(truth):
-                    f_vals.append(forecast[i, lag])
-                    t_vals.append(truth[i + lag + 1])
+                if i + lead + 1 < len(truth):
+                    f_vals.append(forecast[i, lead])
+                    t_vals.append(truth[i + lead + 1])
 
             if len(f_vals) > 1:
                 f_vals = np.array(f_vals)
                 t_vals = np.array(t_vals)
 
-                skill[start_idx, lag] = compute_skill(
+                skill[start_idx, lead] = compute_skill(
                     y_true=t_vals[:, None],          # shape (T, D)
                     y_pred=f_vals[:, None],
                     method=method,

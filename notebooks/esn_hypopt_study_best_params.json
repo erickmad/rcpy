@@ -1,0 +1,9 @@
+{
+    "spectral_radius": 0.25806165365303585,
+    "input_scaling": 0.6936016354911116,
+    "alpha": 1.2492140100733612e-08,
+    "leak_rate": 1,
+    "p": 0.1,
+    "reservoir_units": 500,
+    "seed": 42
+}

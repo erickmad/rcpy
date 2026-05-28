@@ -89,7 +89,7 @@ def preprocess_data_rcpy(
     data,
     init_discard=0,
     train_length=500,
-    val_length=500,
+    val_length=None,
     normalize=True,
 ):
     """
@@ -104,15 +104,15 @@ def preprocess_data_rcpy(
     train_length : int, optional
         Length of the training set (default: 500).
     val_length : int, optional
-        Length of the validation set (default: 500).
+        Length of validation set taken from the END of training data.
+        If None or 0, no validation split is created.
     normalize : bool, optional
         Whether to scale features to [-1, 1] using training data (default: True).
 
     Returns
     -------
     dict
-        Dictionary with training, validation and test splits,
-        as well as normalization parameters.
+        Dictionary containing train/val/test splits and scaling params.
     """
 
     # Ensure 2D shape
@@ -123,18 +123,31 @@ def preprocess_data_rcpy(
     data = data[init_discard:]
     T = data.shape[0]
 
-    # Compute split indices
-    train_end = train_length
-    val_end = train_end + val_length
+    # --------------------------------------------------
+    # Split train(+val) and test
+    # --------------------------------------------------
+    train_block = data[:train_length]
+    test_data = data[train_length:]
 
-    # Extract splits
-    train_data = data[:train_end]
-    val_data = data[train_end:val_end]
-    test_data = data[val_end:]
+    # --------------------------------------------------
+    # Optional validation split
+    # --------------------------------------------------
+    if val_length is None or val_length == 0:
+        train_data = train_block
+        val_data = np.empty((0, train_block.shape[1]))
+    else:
+        if val_length >= train_length:
+            raise ValueError("val_length must be smaller than train_length.")
 
-    # Normalization (based on training data)
+        train_data = train_block[:-val_length]
+        val_data = train_block[-val_length:]
+
+    # --------------------------------------------------
+    # Normalization (fit ONLY on train_data)
+    # --------------------------------------------------
     if normalize:
         scale, train_min, train_max = make_scaler(train_data)
+
         train_data = scale(train_data)
         val_data = scale(val_data) if len(val_data) > 0 else val_data
         test_data = scale(test_data)
@@ -149,6 +162,12 @@ def preprocess_data_rcpy(
         "train_max": train_max,
     }
 
+def normalize_with_reference(x, scale_min, scale_max):
+    """
+    Normalize to [-1, 1] using reference min/max.
+    """
+    x = np.asarray(x)
+    return 2 * (x - scale_min) / (scale_max - scale_min) - 1
 
 def denormalize_data_rcpy(x_scaled, train_min, train_max):
     x_scaled = np.asarray(x_scaled)
@@ -159,3 +178,43 @@ def denormalize_data_rcpy(x_scaled, train_min, train_max):
         raise ValueError("Shape mismatch: x_scaled and train_min/max must have matching number of features.")
     
     return 0.5 * (x_scaled + 1) * (train_max - train_min) + train_min
+
+def add_noise(
+    x,
+    sigma,
+    *,
+    relative=False,
+    rng=None,
+):
+    """
+    Add Gaussian observational noise to data.
+
+    Parameters
+    ----------
+    x : ndarray
+        Clean training data, shape (T, d)
+    sigma : float
+        Noise standard deviation
+    relative : bool, optional
+        If True, sigma is interpreted relative to the data std
+    rng : np.random.Generator, optional
+        Random number generator for reproducibility
+
+    Returns
+    -------
+    x_noisy : ndarray
+        Noisy observations
+    """
+    if sigma == 0.0:
+        return x.copy()
+
+    if rng is None:
+        rng = np.random.default_rng()
+
+    scale = sigma
+    if relative:
+        scale = sigma * np.std(x, axis=0, keepdims=True)
+
+    noise = rng.normal(loc=0.0, scale=scale, size=x.shape)
+    return x + noise
+

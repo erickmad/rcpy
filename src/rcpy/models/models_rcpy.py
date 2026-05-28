@@ -1,14 +1,18 @@
 import numpy as np
 from reservoirpy.nodes import Reservoir, Ridge
+from reservoirpy.mat_gen import uniform
 import os, pickle
 
 def create_model(hyperparams, output_dim=1):
     reservoir = Reservoir(
         units=hyperparams['reservoir_units'],
+        Win=uniform(low=-1.0, high=1.0),
+        W=uniform(low=-1.0, high=1.0),
         sr=hyperparams['spectral_radius'],
         rc_connectivity=hyperparams['p'],
         lr=hyperparams['leak_rate'],
         input_scaling=hyperparams['input_scaling'],
+        input_connectivity=1,
         seed=hyperparams['seed'],
         bias=False
     )

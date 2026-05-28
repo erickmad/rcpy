@@ -24,6 +24,8 @@ class ClimateIndex(Enum):
                 "https://psl.noaa.gov/data/timeseries/month/data/nino34.long.anom.data")
     NINO1950 = ("Nino3.4 ERSSTv5 (1950-2025)", 
                "https://psl.noaa.gov/data/correlation/nina34.anom.data")
+    ONI = ("ONI ERSSTv5 (1950-2025)",
+           "https://psl.noaa.gov/data/correlation/oni.data")
 
     def description(self):
         return self.value[0]

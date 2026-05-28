@@ -58,26 +58,41 @@ def analyze_basic_stats(series, window=24, plot=True):
 def plot_autocorrelation(series, max_lag=60, scale=None):
     """
     Compute and plot autocorrelation function up to max_lag.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The generated figure.
+    ac_series : pandas.Series
+        Autocorrelation values indexed by lag.
     """
+
     s = pd.Series(series).dropna()
-    lags = np.arange(max_lag+1)
+    lags = np.arange(max_lag + 1)
     ac = [s.autocorr(lag) for lag in lags]
 
-    plt.figure(figsize=(6,4))
-    plt.stem(lags, ac)
-    if scale == 'semilog':
-        plt.yscale('symlog', linthresh=1e-2)
-    elif scale == 'loglog':
-        plt.yscale('log')
-        plt.xscale('log')
-    plt.axhline(1/np.e, color='r', ls='--', label='1/e')
-    plt.xlabel("Lag")
-    plt.ylabel("Autocorrelation")
-    plt.title("Autocorrelation Function")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-    return pd.Series(ac, index=lags)
+    ac_series = pd.Series(ac, index=lags)
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+
+    ax.stem(lags, ac)
+    
+    if scale == "semilog":
+        ax.set_yscale("symlog", linthresh=1e-2)
+    elif scale == "loglog":
+        ax.set_yscale("log")
+        ax.set_xscale("log")
+
+    ax.axhline(1/np.e, color="r", ls="--", label="1/e")
+    ax.set_xlabel("Lag")
+    ax.set_ylabel("Autocorrelation")
+    ax.set_title("Autocorrelation Function")
+    ax.legend()
+    ax.grid(True)
+
+    fig.tight_layout()
+
+    return fig, ac_series
 
 
 # =========================

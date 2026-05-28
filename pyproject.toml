@@ -1,0 +1,13 @@
+[project]
+name = "rcpy"
+version = "0.1.0"
+description = "Reservoir computing tools"
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "optuna",
+    "reservoirpy"
+]
